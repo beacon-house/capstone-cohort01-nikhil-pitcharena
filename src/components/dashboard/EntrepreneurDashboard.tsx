@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { Plus, TrendingUp, ThumbsUp, AlertCircle, Loader2 } from 'lucide-react';
+import { Plus, TrendingUp, ThumbsUp, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
 
 interface Pitch {
   id: string;
@@ -14,6 +14,8 @@ interface Pitch {
   product_description: string;
   elevator_pitch: string;
   status: 'draft' | 'published';
+  ai_processing_status?: 'pending' | 'processing' | 'completed' | 'failed';
+  ai_processing_error?: string;
   created_at: string;
   vote_counts?: {
     interesting: number;
@@ -42,7 +44,18 @@ export function EntrepreneurDashboard({ onCreatePitch, onViewPitch }: Entreprene
 
   useEffect(() => {
     loadPitches();
-  }, [user]);
+
+    const interval = setInterval(() => {
+      const hasProcessingPitches = pitches.some(
+        p => p.ai_processing_status === 'pending' || p.ai_processing_status === 'processing'
+      );
+      if (hasProcessingPitches) {
+        loadPitches();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [user, pitches]);
 
   const retryAIFeedback = async (pitchId: string) => {
     setRetryingFeedback(pitchId);
@@ -77,7 +90,7 @@ export function EntrepreneurDashboard({ onCreatePitch, onViewPitch }: Entreprene
     try {
       const { data: pitchData, error: pitchError } = await supabase
         .from('pitches')
-        .select('*')
+        .select('id, title, target_audience, pain_point, product_description, elevator_pitch, status, ai_processing_status, ai_processing_error, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -232,11 +245,37 @@ export function EntrepreneurDashboard({ onCreatePitch, onViewPitch }: Entreprene
                       {pitch.product_description}
                     </p>
                   </div>
-                  {pitch.status === 'draft' && (
-                    <span className="ml-4 px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">
-                      Draft
-                    </span>
-                  )}
+                  <div className="ml-4 flex flex-col items-end space-y-2">
+                    {pitch.status === 'draft' && (
+                      <span className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">
+                        Draft
+                      </span>
+                    )}
+                    {pitch.status === 'published' && pitch.ai_processing_status === 'pending' && (
+                      <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-full flex items-center">
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        Starting AI Analysis
+                      </span>
+                    )}
+                    {pitch.status === 'published' && pitch.ai_processing_status === 'processing' && (
+                      <span className="px-3 py-1 bg-purple-50 text-purple-700 text-xs font-medium rounded-full flex items-center">
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        AI Analyzing
+                      </span>
+                    )}
+                    {pitch.status === 'published' && pitch.ai_processing_status === 'completed' && pitch.ai_feedback && (
+                      <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-medium rounded-full flex items-center">
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        AI Complete
+                      </span>
+                    )}
+                    {pitch.status === 'published' && pitch.ai_processing_status === 'failed' && (
+                      <span className="px-3 py-1 bg-red-50 text-red-700 text-xs font-medium rounded-full flex items-center">
+                        <AlertCircle className="w-3 h-3 mr-1" />
+                        AI Failed
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {pitch.status === 'published' && (

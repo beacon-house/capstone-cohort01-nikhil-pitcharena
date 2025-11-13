@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, ArrowRight, Loader2, CheckCircle } from 'lucide-react';
+import { SubmissionSuccessScreen } from './SubmissionSuccessScreen';
 
 interface PitchFormData {
   title: string;
@@ -17,13 +18,17 @@ interface PitchFormData {
 interface PitchSubmissionFormProps {
   onComplete: () => void;
   onCancel: () => void;
+  onViewPitch?: (pitchId: string) => void;
 }
 
-export function PitchSubmissionForm({ onComplete, onCancel }: PitchSubmissionFormProps) {
+export function PitchSubmissionForm({ onComplete, onCancel, onViewPitch }: PitchSubmissionFormProps) {
   const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [submittedPitchId, setSubmittedPitchId] = useState<string | null>(null);
+  const [submittedPitchTitle, setSubmittedPitchTitle] = useState('');
   const [formData, setFormData] = useState<PitchFormData>({
     title: '',
     target_audience: '',
@@ -114,6 +119,7 @@ export function PitchSubmissionForm({ onComplete, onCancel }: PitchSubmissionFor
           .update({
             ...formData,
             status: 'published',
+            ai_processing_status: 'pending',
           })
           .eq('id', draftId);
 
@@ -125,6 +131,7 @@ export function PitchSubmissionForm({ onComplete, onCancel }: PitchSubmissionFor
             ...formData,
             user_id: user.id,
             status: 'published',
+            ai_processing_status: 'pending',
           })
           .select()
           .single();
@@ -134,30 +141,22 @@ export function PitchSubmissionForm({ onComplete, onCancel }: PitchSubmissionFor
       }
 
       if (pitchId) {
+        setSubmittedPitchId(pitchId);
+        setSubmittedPitchTitle(formData.title);
+        setShowSuccess(true);
+
         const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-pitch-feedback`;
-        try {
-          const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ pitch_id: pitchId }),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Failed to generate AI feedback:', errorData);
-          } else {
-            const result = await response.json();
-            console.log('AI feedback generated successfully:', result);
-          }
-        } catch (feedbackError) {
-          console.error('Error calling AI feedback function:', feedbackError);
-        }
+        fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ pitch_id: pitchId }),
+        }).catch(error => {
+          console.error('Error calling AI feedback function:', error);
+        });
       }
-
-      onComplete();
     } catch (error) {
       console.error('Error submitting pitch:', error);
       alert('Error submitting pitch. Please try again.');
@@ -207,6 +206,21 @@ export function PitchSubmissionForm({ onComplete, onCancel }: PitchSubmissionFor
   const getWordCount = () => {
     return formData.elevator_pitch.trim().split(/\s+/).filter(word => word.length > 0).length;
   };
+
+  if (showSuccess && submittedPitchId) {
+    return (
+      <SubmissionSuccessScreen
+        pitchId={submittedPitchId}
+        pitchTitle={submittedPitchTitle}
+        onViewPitch={() => {
+          if (onViewPitch) {
+            onViewPitch(submittedPitchId);
+          }
+        }}
+        onGoToDashboard={onComplete}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-white z-50 flex flex-col">

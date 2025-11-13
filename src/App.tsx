@@ -92,7 +92,11 @@ function AppContent() {
       />
 
       {modal === 'pitch-form' && (
-        <PitchSubmissionForm onComplete={handlePitchComplete} onCancel={handleCloseModal} />
+        <PitchSubmissionForm
+          onComplete={handlePitchComplete}
+          onCancel={handleCloseModal}
+          onViewPitch={handleViewPitch}
+        />
       )}
 
       {modal === 'pitch-detail' && selectedPitchId && (

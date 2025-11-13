@@ -22,13 +22,16 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  let pitch_id: string | undefined;
+
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { pitch_id } = await req.json();
+    const body = await req.json();
+    pitch_id = body.pitch_id;
 
     if (!pitch_id) {
       return new Response(
@@ -39,6 +42,14 @@ Deno.serve(async (req: Request) => {
         }
       );
     }
+
+    await supabase
+      .from('pitches')
+      .update({
+        ai_processing_status: 'processing',
+        ai_processing_started_at: new Date().toISOString(),
+      })
+      .eq('id', pitch_id);
 
     const { data: pitch, error: pitchError } = await supabase
       .from('pitches')
@@ -88,6 +99,15 @@ Deno.serve(async (req: Request) => {
         });
 
       if (insertError) throw insertError;
+
+      await supabase
+        .from('pitches')
+        .update({
+          ai_processing_status: 'completed',
+          ai_processing_completed_at: new Date().toISOString(),
+          ai_processing_error: null,
+        })
+        .eq('id', pitch_id);
 
       return new Response(
         JSON.stringify({ success: true, feedback: mockFeedback }),
@@ -163,6 +183,15 @@ Be constructive, specific, and actionable in your feedback.`;
 
     if (insertError) throw insertError;
 
+    await supabase
+      .from('pitches')
+      .update({
+        ai_processing_status: 'completed',
+        ai_processing_completed_at: new Date().toISOString(),
+        ai_processing_error: null,
+      })
+      .eq('id', pitch_id);
+
     return new Response(
       JSON.stringify({ success: true, feedback }),
       {
@@ -172,6 +201,26 @@ Be constructive, specific, and actionable in your feedback.`;
     );
   } catch (error) {
     console.error('Error generating feedback:', error);
+
+    if (pitch_id) {
+      try {
+        const supabase = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
+
+        await supabase
+          .from('pitches')
+          .update({
+            ai_processing_status: 'failed',
+            ai_processing_error: error.message || 'Failed to generate feedback',
+            ai_processing_completed_at: new Date().toISOString(),
+          })
+          .eq('id', pitch_id);
+      } catch (updateError) {
+        console.error('Error updating pitch status:', updateError);
+      }
+    }
 
     return new Response(
       JSON.stringify({ error: error.message || 'Failed to generate feedback' }),

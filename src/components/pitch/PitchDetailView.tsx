@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { X, ThumbsUp, AlertCircle, TrendingUp, Lightbulb, Target, Loader2 } from 'lucide-react';
+import { X, ThumbsUp, AlertCircle, TrendingUp, Lightbulb, Target, Loader2, CheckCircle } from 'lucide-react';
 
 interface AIFeedback {
   strengths: string[];
@@ -22,6 +22,8 @@ interface PitchDetail {
   product_description: string;
   elevator_pitch: string;
   status: string;
+  ai_processing_status?: 'pending' | 'processing' | 'completed' | 'failed';
+  ai_processing_error?: string;
   created_at: string;
   vote_counts: {
     interesting: number;
@@ -45,7 +47,15 @@ export function PitchDetailView({ pitchId, onClose }: PitchDetailViewProps) {
 
   useEffect(() => {
     loadPitchDetail();
-  }, [pitchId]);
+
+    const interval = setInterval(() => {
+      if (pitch && (pitch.ai_processing_status === 'pending' || pitch.ai_processing_status === 'processing')) {
+        loadPitchDetail();
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [pitchId, pitch]);
 
   const retryAIFeedback = async () => {
     setRetryingFeedback(true);
@@ -78,7 +88,7 @@ export function PitchDetailView({ pitchId, onClose }: PitchDetailViewProps) {
     try {
       const { data: pitchData, error: pitchError } = await supabase
         .from('pitches')
-        .select('*')
+        .select('id, user_id, title, target_audience, pain_point, product_description, elevator_pitch, status, ai_processing_status, ai_processing_error, created_at')
         .eq('id', pitchId)
         .single();
 
@@ -181,7 +191,38 @@ export function PitchDetailView({ pitchId, onClose }: PitchDetailViewProps) {
 
   return (
     <div className="fixed inset-0 bg-white z-50 overflow-y-auto">
-      <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-4 flex items-center justify-between z-10">
+      {/* Status Banner */}
+      {pitch && pitch.status === 'published' && (pitch.ai_processing_status === 'pending' || pitch.ai_processing_status === 'processing') && (
+        <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-4 py-3 z-20">
+          <div className="max-w-4xl mx-auto flex items-center justify-center space-x-3">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <p className="text-sm font-medium">
+              {pitch.ai_processing_status === 'pending' ? 'AI Analysis Starting...' : 'AI is analyzing your pitch...'}
+            </p>
+          </div>
+        </div>
+      )}
+      {pitch && pitch.status === 'published' && pitch.ai_processing_status === 'failed' && (
+        <div className="sticky top-0 bg-red-600 text-white px-4 py-3 z-20">
+          <div className="max-w-4xl mx-auto flex items-center justify-center space-x-3">
+            <AlertCircle className="w-5 h-5" />
+            <p className="text-sm font-medium">
+              AI feedback generation failed. You can retry below.
+            </p>
+          </div>
+        </div>
+      )}
+      {pitch && pitch.status === 'published' && pitch.ai_processing_status === 'completed' && pitch.ai_feedback && (
+        <div className="sticky top-0 bg-emerald-600 text-white px-4 py-3 z-20">
+          <div className="max-w-4xl mx-auto flex items-center justify-center space-x-3">
+            <CheckCircle className="w-5 h-5" />
+            <p className="text-sm font-medium">
+              AI feedback complete! Score: {pitch.ai_feedback.overall_score}/10
+            </p>
+          </div>
+        </div>
+      )}
+      <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-4 flex items-center justify-between z-10" style={{ top: pitch?.status === 'published' ? '52px' : '0' }}>
         <button
           onClick={onClose}
           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -263,7 +304,22 @@ export function PitchDetailView({ pitchId, onClose }: PitchDetailViewProps) {
                 <h3 className="text-xl font-bold text-gray-900">AI Feedback</h3>
               </div>
 
-              {pitch.ai_feedback ? (
+              {pitch.ai_processing_status === 'pending' || pitch.ai_processing_status === 'processing' ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Loader2 className="w-12 h-12 animate-spin text-purple-600 mb-4" />
+                  <p className="text-lg font-semibold text-gray-900 mb-2">
+                    {pitch.ai_processing_status === 'pending' ? 'Starting AI Analysis...' : 'AI is Analyzing Your Pitch'}
+                  </p>
+                  <p className="text-sm text-gray-600 text-center">
+                    This usually takes 10-30 seconds. Analyzing strengths, weaknesses, and generating recommendations.
+                  </p>
+                  <div className="mt-6 w-full max-w-xs">
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-purple-600 to-blue-600 animate-pulse" style={{ width: '60%' }} />
+                    </div>
+                  </div>
+                </div>
+              ) : pitch.ai_feedback ? (
                 <div className="space-y-6">
                   <div>
                     <h4 className="text-sm font-semibold text-emerald-600 mb-3">STRENGTHS</h4>

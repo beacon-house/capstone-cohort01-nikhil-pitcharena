@@ -54,6 +54,10 @@ export interface Database {
           product_description: string
           elevator_pitch: string
           status: 'draft' | 'published'
+          ai_processing_status: 'pending' | 'processing' | 'completed' | 'failed'
+          ai_processing_started_at: string | null
+          ai_processing_completed_at: string | null
+          ai_processing_error: string | null
           created_at: string
           updated_at: string
         }
@@ -66,6 +70,10 @@ export interface Database {
           product_description: string
           elevator_pitch: string
           status?: 'draft' | 'published'
+          ai_processing_status?: 'pending' | 'processing' | 'completed' | 'failed'
+          ai_processing_started_at?: string | null
+          ai_processing_completed_at?: string | null
+          ai_processing_error?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -78,6 +86,10 @@ export interface Database {
           product_description?: string
           elevator_pitch?: string
           status?: 'draft' | 'published'
+          ai_processing_status?: 'pending' | 'processing' | 'completed' | 'failed'
+          ai_processing_started_at?: string | null
+          ai_processing_completed_at?: string | null
+          ai_processing_error?: string | null
           created_at?: string
           updated_at?: string
         }
