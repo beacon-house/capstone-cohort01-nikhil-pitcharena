@@ -12,6 +12,11 @@ interface SubmissionSuccessScreenProps {
   onGoToDashboard: () => void;
 }
 
+interface PitchStatus {
+  ai_processing_status: string;
+  ai_processing_error?: string;
+}
+
 interface ProcessingStage {
   id: string;
   label: string;
@@ -25,6 +30,7 @@ export function SubmissionSuccessScreen({
   onGoToDashboard,
 }: SubmissionSuccessScreenProps) {
   const [aiStatus, setAiStatus] = useState<'pending' | 'processing' | 'completed' | 'failed'>('pending');
+  const [errorMessage, setErrorMessage] = useState<string>('');
   const [stages, setStages] = useState<ProcessingStage[]>([
     { id: 'submitted', label: 'Pitch Submitted', status: 'completed' },
     { id: 'analyzing', label: 'AI Analysis In Progress', status: 'active' },
@@ -57,6 +63,10 @@ export function SubmissionSuccessScreen({
         const status = pitch.ai_processing_status || 'pending';
         setAiStatus(status);
         updateStages(status);
+
+        if (status === 'failed' && pitch.ai_processing_error) {
+          setErrorMessage(pitch.ai_processing_error);
+        }
 
         if (status === 'completed' || status === 'failed') {
           if (pollingInterval) {
@@ -220,9 +230,11 @@ export function SubmissionSuccessScreen({
                     <p className="text-sm font-semibold text-red-900 mb-1">
                       AI Analysis Failed
                     </p>
-                    <p className="text-xs text-red-700">
-                      There was an issue generating AI feedback. You can retry from your dashboard
-                      or pitch detail page.
+                    <p className="text-xs text-red-700 mb-2">
+                      {errorMessage || 'There was an issue generating AI feedback.'}
+                    </p>
+                    <p className="text-xs text-red-600">
+                      You can retry from your dashboard or pitch detail page.
                     </p>
                   </div>
                 </div>

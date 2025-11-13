@@ -70,49 +70,25 @@ Deno.serve(async (req: Request) => {
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
 
     if (!openaiApiKey) {
-      console.warn('OpenAI API key not configured, using mock feedback');
-
-      const mockFeedback = {
-        strengths: [
-          'Clear problem identification and target audience definition',
-          'Well-articulated value proposition',
-          'Demonstrates understanding of market need',
-        ],
-        weaknesses: [
-          'Could benefit from more specific metrics and data',
-          'Competitive landscape analysis is limited',
-          'Monetization strategy could be more detailed',
-        ],
-        recommendations: [
-          'Include market size data and growth projections',
-          'Add more details about competitive advantages',
-          'Clarify go-to-market strategy and customer acquisition plan',
-        ],
-        overall_score: 7,
-      };
-
-      const { error: insertError } = await supabase
-        .from('ai_feedback')
-        .insert({
-          pitch_id: pitch_id,
-          ...mockFeedback,
-        });
-
-      if (insertError) throw insertError;
+      const errorMessage = 'OpenAI API key is not configured. Please add OPENAI_API_KEY to your Supabase Edge Function secrets.';
+      console.error(errorMessage);
 
       await supabase
         .from('pitches')
         .update({
-          ai_processing_status: 'completed',
+          ai_processing_status: 'failed',
+          ai_processing_error: errorMessage,
           ai_processing_completed_at: new Date().toISOString(),
-          ai_processing_error: null,
         })
         .eq('id', pitch_id);
 
       return new Response(
-        JSON.stringify({ success: true, feedback: mockFeedback }),
+        JSON.stringify({
+          error: errorMessage,
+          code: 'MISSING_API_KEY'
+        }),
         {
-          status: 200,
+          status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
@@ -162,8 +138,23 @@ Be constructive, specific, and actionable in your feedback.`;
 
     if (!openaiResponse.ok) {
       const errorText = await openaiResponse.text();
-      console.error('OpenAI API error:', errorText);
-      throw new Error(`OpenAI API error: ${openaiResponse.status} - ${errorText}`);
+      console.error('OpenAI API error:', {
+        status: openaiResponse.status,
+        statusText: openaiResponse.statusText,
+        error: errorText,
+        pitch_id: pitch_id
+      });
+
+      let errorMessage = 'Failed to generate AI feedback from OpenAI.';
+      if (openaiResponse.status === 401) {
+        errorMessage = 'OpenAI API authentication failed. Please verify your API key is valid.';
+      } else if (openaiResponse.status === 429) {
+        errorMessage = 'OpenAI API rate limit exceeded. Please try again in a few moments.';
+      } else if (openaiResponse.status >= 500) {
+        errorMessage = 'OpenAI service is temporarily unavailable. Please try again later.';
+      }
+
+      throw new Error(`${errorMessage} (Status: ${openaiResponse.status})`);
     }
 
     const openaiData = await openaiResponse.json();
@@ -200,7 +191,12 @@ Be constructive, specific, and actionable in your feedback.`;
       }
     );
   } catch (error) {
-    console.error('Error generating feedback:', error);
+    console.error('Error generating feedback:', {
+      message: error.message,
+      stack: error.stack,
+      pitch_id: pitch_id,
+      timestamp: new Date().toISOString()
+    });
 
     if (pitch_id) {
       try {
@@ -209,11 +205,13 @@ Be constructive, specific, and actionable in your feedback.`;
           Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         );
 
+        const errorMessage = error.message || 'Failed to generate AI feedback. Please try again.';
+
         await supabase
           .from('pitches')
           .update({
             ai_processing_status: 'failed',
-            ai_processing_error: error.message || 'Failed to generate feedback',
+            ai_processing_error: errorMessage,
             ai_processing_completed_at: new Date().toISOString(),
           })
           .eq('id', pitch_id);
@@ -223,7 +221,10 @@ Be constructive, specific, and actionable in your feedback.`;
     }
 
     return new Response(
-      JSON.stringify({ error: error.message || 'Failed to generate feedback' }),
+      JSON.stringify({
+        error: error.message || 'Failed to generate AI feedback. Please try again.',
+        pitch_id: pitch_id
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
